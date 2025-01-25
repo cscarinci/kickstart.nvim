@@ -156,6 +156,11 @@ vim.opt.cursorline = true
 -- Minimal number of screen lines to keep above and below the cursor.
 vim.opt.scrolloff = 10
 
+-- My custom options.
+vim.opt.wrap = true
+vim.opt.linebreak = true
+vim.opt.whichwrap:append '<,>,[,]'
+
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
 
@@ -189,6 +194,16 @@ vim.keymap.set('n', '<C-l>', '<C-w><C-l>', { desc = 'Move focus to the right win
 vim.keymap.set('n', '<C-j>', '<C-w><C-j>', { desc = 'Move focus to the lower window' })
 vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper window' })
 
+-- My custom keymaps.
+vim.keymap.set('n', '<A-j>', ':m .+1<CR>==', { noremap = true, silent = true }) -- move line down(n)
+vim.keymap.set('n', '<A-k>', ':m .-2<CR>==', { noremap = true, silent = true }) -- move line up(n)
+vim.keymap.set('n', '<A-Down>', ':m .+1<CR>==', { noremap = true, silent = true }) -- move line down(n)
+vim.keymap.set('n', '<A-Up>', ':m .-2<CR>==', { noremap = true, silent = true }) -- move line up(n)
+vim.keymap.set('v', '<A-j>', ":m '>+1<CR>gv=gv", { noremap = true, silent = true }) -- move line down(v)
+vim.keymap.set('v', '<A-k>', ":m '<-2<CR>gv=gv", { noremap = true, silent = true }) -- move line up(v)
+vim.keymap.set('v', '<A-Down>', ":m '>+1<CR>gv=gv", { noremap = true, silent = true }) -- move line down(v)
+vim.keymap.set('v', '<A-Up>', ":m '<-2<CR>gv=gv", { noremap = true, silent = true }) -- move line up(v)
+
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
 
@@ -202,6 +217,8 @@ vim.api.nvim_create_autocmd('TextYankPost', {
     vim.highlight.on_yank()
   end,
 })
+
+-- My custom autocommands.
 
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
@@ -253,6 +270,13 @@ require('lazy').setup({
         changedelete = { text = '~' },
       },
     },
+    config = function(_, opts)
+      require('gitsigns').setup(opts) -- Pass `opts` to `setup` to merge with provided options.
+
+      -- Keymaps for gitsigns functionality
+      vim.keymap.set('n', '<leader>gh', ':Gitsigns preview_hunk<CR>', { noremap = true, desc = 'Gitsigns: preview [h]unk' })
+      vim.keymap.set('n', '<leader>gi', ':Gitsigns preview_hunk_inline<CR>', { noremap = true, desc = 'Gitsigns: preview hunk [i]nline' })
+    end,
   },
 
   -- NOTE: Plugins can also be configured to run Lua code when they are loaded.
@@ -718,10 +742,30 @@ require('lazy').setup({
         --
         -- You can use 'stop_after_first' to run the first available formatter from the list
         -- javascript = { "prettierd", "prettier", stop_after_first = true },
+        tex = { 'tex-fmt' },
       },
     },
   },
-
+  {
+    'kdheepak/lazygit.nvim',
+    lazy = true,
+    cmd = {
+      'LazyGit',
+      'LazyGitConfig',
+      'LazyGitCurrentFile',
+      'LazyGitFilter',
+      'LazyGitFilterCurrentFile',
+    },
+    -- optional for floating window border decoration
+    dependencies = {
+      'nvim-lua/plenary.nvim',
+    },
+    -- setting the keybinding for LazyGit with 'keys' is recommended in
+    -- order to load the plugin when the command is run for the first time
+    keys = {
+      { '<leader>lg', '<cmd>LazyGit<cr>', desc = 'LazyGit' },
+    },
+  },
   { -- Autocompletion
     'hrsh7th/nvim-cmp',
     event = 'InsertEnter',
@@ -729,15 +773,34 @@ require('lazy').setup({
       -- Snippet Engine & its associated nvim-cmp source
       {
         'L3MON4D3/LuaSnip',
-        build = (function()
-          -- Build Step is needed for regex support in snippets.
-          -- This step is not supported in many windows environments.
-          -- Remove the below condition to re-enable on windows.
-          if vim.fn.has 'win32' == 1 or vim.fn.executable 'make' == 0 then
-            return
-          end
-          return 'make install_jsregexp'
-        end)(),
+        build = 'make install_jsregexp',
+        config = function()
+          local luasnip = require 'luasnip'
+          luasnip.config.setup {
+            update_events = { 'TextChanged', 'TextChangedI' },
+            enable_autosnippets = true,
+            store_selection_keys = '<Tab>',
+          }
+
+          -- Load custom snippets from a specified directory
+          require('luasnip.loaders.from_lua').lazy_load { paths = './lua/luasnip/' }
+
+          -- Key mappings for Luasnip
+          vim.keymap.set({ 'i' }, '<C-k>', function()
+            luasnip.expand()
+          end, { silent = true, desc = 'expand autocomplete' })
+          vim.keymap.set({ 'i', 's' }, '<C-j>', function()
+            luasnip.jump(1)
+          end, { silent = true, desc = 'next autocomplete' })
+          vim.keymap.set({ 'i', 's' }, '<C-L>', function()
+            luasnip.jump(-1)
+          end, { silent = true, desc = 'previous autocomplete' })
+          vim.keymap.set({ 'i', 's' }, '<C-E>', function()
+            if luasnip.choice_active() then
+              luasnip.change_choice(1)
+            end
+          end, { silent = true, desc = 'select autocomplete' })
+        end,
         dependencies = {
           -- `friendly-snippets` contains a variety of premade snippets.
           --    See the README about individual language/framework/plugin snippets:
@@ -756,12 +819,15 @@ require('lazy').setup({
       --  nvim-cmp does not ship with all sources by default. They are split
       --  into multiple repos for maintenance purposes.
       'hrsh7th/cmp-nvim-lsp',
-      'hrsh7th/cmp-path',
+      'hrsh7th/cmp-buffer', --autocomplete on the buffer
+      'hrsh7th/cmp-path', --autocomplete path variables
+      'hrsh7th/cmp-cmdline',
     },
     config = function()
       -- See `:help cmp`
       local cmp = require 'cmp'
       local luasnip = require 'luasnip'
+
       luasnip.config.setup {}
 
       cmp.setup {
@@ -784,7 +850,7 @@ require('lazy').setup({
 
           -- Scroll the documentation window [b]ack / [f]orward
           ['<C-b>'] = cmp.mapping.scroll_docs(-4),
-          ['<C-f>'] = cmp.mapping.scroll_docs(4),
+          -- ['<C-f>'] = cmp.mapping.scroll_docs(4),
 
           -- Accept ([y]es) the completion.
           --  This will auto-import if your LSP supports it.
@@ -800,7 +866,7 @@ require('lazy').setup({
           -- Manually trigger a completion from nvim-cmp.
           --  Generally you don't need this, because nvim-cmp will display
           --  completions whenever it has completion options available.
-          ['<C-Space>'] = cmp.mapping.complete {},
+          -- ['<C-Space>'] = cmp.mapping.complete {},
 
           -- Think of <c-l> as moving to the right of your snippet expansion.
           --  So if you have a snippet that's like:
@@ -823,6 +889,52 @@ require('lazy').setup({
 
           -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
           --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
+          ['<CR>'] = cmp.mapping(function(fallback)
+            if cmp.visible() then
+              if luasnip.expandable() then
+                luasnip.expand()
+              else
+                cmp.confirm {
+                  select = true,
+                }
+              end
+            else
+              fallback()
+            end
+          end),
+
+          ['<Tab>'] = cmp.mapping(function(fallback)
+            if cmp.visible() then
+              if #cmp.get_entries() == 1 then
+                cmp.confirm { select = true }
+              else
+                cmp.select_next_item()
+              end
+            elseif luasnip.locally_jumpable(1) then
+              luasnip.jump(1)
+            else
+              fallback()
+            end
+          end, { 'i', 's' }),
+
+          ['<S-Tab>'] = cmp.mapping(function(fallback)
+            if cmp.visible() then
+              cmp.select_prev_item()
+            elseif luasnip.locally_jumpable(-1) then
+              luasnip.jump(-1)
+            else
+              fallback()
+            end
+          end, { 'i', 's' }),
+
+          ['<C-g>'] = cmp.mapping(cmp.mapping.scroll_docs(-4), { 'i', 'c' }),
+          ['<C-f>'] = cmp.mapping(cmp.mapping.scroll_docs(4), { 'i', 'c' }),
+          ['<C-Space>'] = cmp.mapping(cmp.mapping.complete(), { 'i', 'c' }),
+          -- ['<C-y>'] = cmp.config.disable,
+          ['<C-e>'] = cmp.mapping {
+            i = cmp.mapping.abort(),
+            c = cmp.mapping.close(),
+          },
         },
         sources = {
           {
@@ -833,8 +945,32 @@ require('lazy').setup({
           { name = 'nvim_lsp' },
           { name = 'luasnip' },
           { name = 'path' },
+          { name = 'buffer' },
         },
       }
+
+      cmp.setup.cmdline({ '/', '?' }, {
+        mapping = cmp.mapping.preset.cmdline(),
+        sources = {
+          { name = 'buffer' },
+        },
+      })
+      cmp.setup.cmdline(':', {
+        mapping = cmp.mapping.preset.cmdline(),
+        sources = cmp.config.sources({
+          { name = 'path', option = { trailing_slash = true } },
+        }, {
+          { name = 'cmdline', option = { treat_trailing_slash = false } },
+        }),
+        matching = { disallow_symbol_nonprefix_matching = false },
+      })
+      cmp.setup.filetype('tex', {
+        sources = {
+          { name = 'vimtex' },
+          { name = 'luasnip' },
+          { name = 'buffer' },
+        },
+      })
     end,
   },
 
@@ -894,6 +1030,17 @@ require('lazy').setup({
 
       -- ... and there is more!
       --  Check out: https://github.com/echasnovski/mini.nvim
+
+      --  My custom mini modules
+      require('mini.operators').setup()
+
+      require('mini.files').setup()
+      vim.keymap.set('n', '_', function()
+        local buf_name = vim.api.nvim_buf_get_name(0)
+        local path = vim.fn.filereadable(buf_name) == 1 and buf_name or vim.fn.getcwd()
+        MiniFiles.open(path)
+        MiniFiles.reveal_cwd()
+      end, { desc = 'Open Mini Files' })
     end,
   },
   { -- Highlight, edit, and navigate code
@@ -907,10 +1054,11 @@ require('lazy').setup({
       auto_install = true,
       highlight = {
         enable = true,
+        disable = { 'latex' },
         -- Some languages depend on vim's regex highlighting system (such as Ruby) for indent rules.
         --  If you are experiencing weird indenting issues, add the language to
         --  the list of additional_vim_regex_highlighting and disabled languages for indent.
-        additional_vim_regex_highlighting = { 'ruby' },
+        additional_vim_regex_highlighting = { 'latex', 'markdown', 'ruby' },
       },
       indent = { enable = true, disable = { 'ruby' } },
     },
@@ -932,10 +1080,10 @@ require('lazy').setup({
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
   -- require 'kickstart.plugins.debug',
-  -- require 'kickstart.plugins.indent_line',
+  require 'kickstart.plugins.indent_line',
   -- require 'kickstart.plugins.lint',
   -- require 'kickstart.plugins.autopairs',
-  -- require 'kickstart.plugins.neo-tree',
+  require 'kickstart.plugins.neo-tree',
   -- require 'kickstart.plugins.gitsigns', -- adds gitsigns recommend keymaps
 
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
@@ -948,6 +1096,335 @@ require('lazy').setup({
   -- Or use telescope!
   -- In normal mode type `<space>sh` then write `lazy.nvim-plugin`
   -- you can continue same window with `<space>sr` which resumes last telescope search
+
+  -- My custom plugins
+  {
+    'tpope/vim-fugitive',
+    config = function()
+      --vim-fugitive
+      vim.keymap.set('n', '<leader>gs', ':Git<CR>', { noremap = true, desc = 'git status' }) --git status
+      vim.keymap.set('n', '<leader>ga', ':Git add ', { noremap = true, desc = 'git add ' })
+      vim.keymap.set('n', '<leader>gA', ':Git add .<CR>', { noremap = true, desc = 'git add .' })
+      vim.keymap.set('n', '<leader>gp', ':Git push --quiet <CR>', { noremap = true, desc = 'git push' })
+      vim.keymap.set('n', '<leader>gc', ':Git commit -qam "', { noremap = true, desc = 'git commit -am' })
+    end,
+  },
+  {
+    'micangl/cmp-vimtex',
+    ft = 'tex',
+    config = function()
+      require('cmp_vimtex').setup {}
+    end,
+  },
+  {
+    'stevearc/oil.nvim',
+    ---@module 'oil'
+    ---@type oil.SetupOpts
+    opts = {},
+    -- Optional dependencies
+    dependencies = { { 'echasnovski/mini.icons', opts = {} } },
+    -- dependencies = { "nvim-tree/nvim-web-devicons" }, -- use if you prefer nvim-web-devicons
+    -- Lazy loading is not recommended because it is very tricky to make it work correctly in all situations.
+    lazy = false,
+    config = function()
+      -- helper function to parse output
+      local function parse_output(proc)
+        local result = proc:wait()
+        local ret = {}
+        if result.code == 0 then
+          for line in vim.gsplit(result.stdout, '\n', { plain = true, trimempty = true }) do
+            -- Remove trailing slash
+            line = line:gsub('/$', '')
+            ret[line] = true
+          end
+        end
+        return ret
+      end
+
+      -- build git status cache
+      local function new_git_status()
+        return setmetatable({}, {
+          __index = function(self, key)
+            local ignore_proc = vim.system({ 'git', 'ls-files', '--ignored', '--exclude-standard', '--others', '--directory' }, {
+              cwd = key,
+              text = true,
+            })
+            local tracked_proc = vim.system({ 'git', 'ls-tree', 'HEAD', '--name-only' }, {
+              cwd = key,
+              text = true,
+            })
+            local ret = {
+              ignored = parse_output(ignore_proc),
+              tracked = parse_output(tracked_proc),
+            }
+
+            rawset(self, key, ret)
+            return ret
+          end,
+        })
+      end
+      local git_status = new_git_status()
+
+      -- Clear git status cache on refresh
+      local refresh = require('oil.actions').refresh
+      local orig_refresh = refresh.callback
+      refresh.callback = function(...)
+        git_status = new_git_status()
+        orig_refresh(...)
+      end
+
+      local detail = false
+
+      require('oil').setup {
+        -- Oil will take over directory buffers (e.g. `vim .` or `:e src/`)
+        -- Set to false if you want some other plugin (e.g. netrw) to open when you edit directories.
+        default_file_explorer = true,
+        -- Id is automatically added at the beginning, and name at the end
+        -- See :help oil-columns
+        columns = {
+          'icon',
+          -- "permissions",
+          -- "size",
+          -- "mtime",
+        },
+        -- Buffer-local options to use for oil buffers
+        buf_options = {
+          buflisted = false,
+          bufhidden = 'hide',
+        },
+        -- Window-local options to use for oil buffers
+        win_options = {
+          wrap = false,
+          signcolumn = 'no',
+          cursorcolumn = false,
+          foldcolumn = '0',
+          spell = false,
+          list = false,
+          conceallevel = 3,
+          concealcursor = 'nvic',
+        },
+        -- Send deleted files to the trash instead of permanently deleting them (:help oil-trash)
+        delete_to_trash = true,
+        -- Skip the confirmation popup for simple operations (:help oil.skip_confirm_for_simple_edits)
+        skip_confirm_for_simple_edits = false,
+        -- Selecting a new/moved/renamed file or directory will prompt you to save changes first
+        -- (:help prompt_save_on_select_new_entry)
+        prompt_save_on_select_new_entry = true,
+        -- Oil will automatically delete hidden buffers after this delay
+        -- You can set the delay to false to disable cleanup entirely
+        -- Note that the cleanup process only starts when none of the oil buffers are currently displayed
+        cleanup_delay_ms = 2000,
+        lsp_file_methods = {
+          -- Enable or disable LSP file operations
+          enabled = true,
+          -- Time to wait for LSP file operations to complete before skipping
+          timeout_ms = 1000,
+          -- Set to true to autosave buffers that are updated with LSP willRenameFiles
+          -- Set to "unmodified" to only save unmodified buffers
+          autosave_changes = false,
+        },
+        -- Constrain the cursor to the editable parts of the oil buffer
+        -- Set to `false` to disable, or "name" to keep it on the file names
+        constrain_cursor = 'editable',
+        -- Set to true to watch the filesystem for changes and reload oil
+        watch_for_changes = false,
+        -- Keymaps in oil buffer. Can be any value that `vim.keymap.set` accepts OR a table of keymap
+        -- options with a `callback` (e.g. { callback = function() ... end, desc = "", mode = "n" })
+        -- Additionally, if it is a string that matches "actions.<name>",
+        -- it will use the mapping at require("oil.actions").<name>
+        -- Set to `false` to remove a keymap
+        -- See :help oil-actions for a list of all available actions
+        keymaps = {
+          ['g?'] = { 'actions.show_help', mode = 'n' },
+          ['<CR>'] = 'actions.select',
+          ['<C-s>'] = { 'actions.select', opts = { vertical = true } },
+          ['<C-h>'] = { 'actions.select', opts = { horizontal = true } },
+          ['<C-t>'] = { 'actions.select', opts = { tab = true } },
+          ['<C-p>'] = 'actions.preview',
+          ['<C-c>'] = { 'actions.close', mode = 'n' },
+          ['<C-l>'] = 'actions.refresh',
+          ['-'] = { 'actions.parent', mode = 'n' },
+          ['_'] = { 'actions.open_cwd', mode = 'n' },
+          ['`'] = { 'actions.cd', mode = 'n' },
+          ['~'] = { 'actions.cd', opts = { scope = 'tab' }, mode = 'n' },
+          ['gs'] = { 'actions.change_sort', mode = 'n' },
+          ['gx'] = 'actions.open_external',
+          ['g.'] = { 'actions.toggle_hidden', mode = 'n' },
+          ['g\\'] = { 'actions.toggle_trash', mode = 'n' },
+          ['gd'] = {
+            desc = 'Toggle file detail view',
+            callback = function()
+              detail = not detail
+              if detail then
+                require('oil').set_columns { 'icon', 'permissions', 'size', 'mtime' }
+              else
+                require('oil').set_columns { 'icon' }
+              end
+            end,
+          },
+        },
+        -- Set to false to disable all of the above keymaps
+        use_default_keymaps = true,
+        view_options = {
+          -- -- Show files and directories that start with "."
+          -- show_hidden = true,
+          -- -- This function defines what is considered a "hidden" file
+          -- is_hidden_file = function(name, bufnr)
+          --   local m = name:match '^%.'
+          --   return m ~= nil
+          -- end,
+
+          is_hidden_file = function(name, bufnr)
+            local dir = require('oil').get_current_dir(bufnr)
+            local is_dotfile = vim.startswith(name, '.') and name ~= '..'
+            -- if no local directory (e.g. for ssh connections), just hide dotfiles
+            if not dir then
+              return is_dotfile
+            end
+            -- dotfiles are considered hidden unless tracked
+            if is_dotfile then
+              return not git_status[dir].tracked[name]
+            else
+              -- Check if file is gitignored
+              return git_status[dir].ignored[name]
+            end
+          end,
+
+          -- This function defines what will never be shown, even when `show_hidden` is set
+          is_always_hidden = function(name, bufnr)
+            return false
+          end,
+          -- Sort file names with numbers in a more intuitive order for humans.
+          -- Can be "fast", true, or false. "fast" will turn it off for large directories.
+          natural_order = 'fast',
+          -- Sort file and directory names case insensitive
+          case_insensitive = false,
+          sort = {
+            -- sort order can be "asc" or "desc"
+            -- see :help oil-columns to see which columns are sortable
+            { 'type', 'asc' },
+            { 'name', 'asc' },
+          },
+          -- Customize the highlight group for the file name
+          highlight_filename = function(entry, is_hidden, is_link_target, is_link_orphan)
+            return nil
+          end,
+        },
+        -- Extra arguments to pass to SCP when moving/copying files over SSH
+        extra_scp_args = {},
+        -- EXPERIMENTAL support for performing file operations with git
+        git = {
+          -- Return true to automatically git add/mv/rm files
+          add = function(path)
+            return false
+          end,
+          mv = function(src_path, dest_path)
+            return false
+          end,
+          rm = function(path)
+            return false
+          end,
+        },
+        -- Configuration for the floating window in oil.open_float
+        float = {
+          -- Padding around the floating window
+          padding = 2,
+          -- max_width and max_height can be integers or a float between 0 and 1 (e.g. 0.4 for 40%)
+          max_width = 0,
+          max_height = 0,
+          border = 'rounded',
+          win_options = {
+            winblend = 0,
+          },
+          -- optionally override the oil buffers window title with custom function: fun(winid: integer): string
+          get_win_title = nil,
+          -- preview_split: Split direction: "auto", "left", "right", "above", "below".
+          preview_split = 'auto',
+          -- This is the config that will be passed to nvim_open_win.
+          -- Change values here to customize the layout
+          override = function(conf)
+            return conf
+          end,
+        },
+        -- Configuration for the file preview window
+        preview_win = {
+          -- Whether the preview window is automatically updated when the cursor is moved
+          update_on_cursor_moved = true,
+          -- How to open the preview window "load"|"scratch"|"fast_scratch"
+          preview_method = 'fast_scratch',
+          -- A function that returns true to disable preview on a file e.g. to avoid lag
+          disable_preview = function(filename)
+            return false
+          end,
+          -- Window-local options to use for preview window buffers
+          win_options = {},
+        },
+        -- Configuration for the floating action confirmation window
+        confirmation = {
+          -- Width dimensions can be integers or a float between 0 and 1 (e.g. 0.4 for 40%)
+          -- min_width and max_width can be a single value or a list of mixed integer/float types.
+          -- max_width = {100, 0.8} means "the lesser of 100 columns or 80% of total"
+          max_width = 0.9,
+          -- min_width = {40, 0.4} means "the greater of 40 columns or 40% of total"
+          min_width = { 40, 0.4 },
+          -- optionally define an integer/float for the exact width of the preview window
+          width = nil,
+          -- Height dimensions can be integers or a float between 0 and 1 (e.g. 0.4 for 40%)
+          -- min_height and max_height can be a single value or a list of mixed integer/float types.
+          -- max_height = {80, 0.9} means "the lesser of 80 columns or 90% of total"
+          max_height = 0.9,
+          -- min_height = {5, 0.1} means "the greater of 5 columns or 10% of total"
+          min_height = { 5, 0.1 },
+          -- optionally define an integer/float for the exact height of the preview window
+          height = nil,
+          border = 'rounded',
+          win_options = {
+            winblend = 0,
+          },
+        },
+        -- Configuration for the floating progress window
+        progress = {
+          max_width = 0.9,
+          min_width = { 40, 0.4 },
+          width = nil,
+          max_height = { 10, 0.9 },
+          min_height = { 5, 0.1 },
+          height = nil,
+          border = 'rounded',
+          minimized_border = 'none',
+          win_options = {
+            winblend = 0,
+          },
+        },
+        -- Configuration for the floating SSH window
+        ssh = {
+          border = 'rounded',
+        },
+        -- Configuration for the floating keymaps help window
+        keymaps_help = {
+          border = 'rounded',
+        },
+      }
+      vim.keymap.set('n', '-', '<CMD>Oil<CR>', { desc = 'Open parent directory' })
+    end,
+  },
+  {
+    'lervag/vimtex',
+    lazy = false,
+    -- tag = "v2.15", -- uncomment to pin to a specific release
+    config = function()
+      --global vimtex settings
+      vim.g.vimtex_imaps_enabled = 0 --i.e., disable them
+      --vimtex_view_settings
+      vim.g.vimtex_view_method = 'sioyek'
+      -- vim.g.vimtex_view_method = 'zathura'
+      vim.g.vimtex_view_general_options = '-reuse-instance -forward-search @tex @line @pdf'
+      --quickfix settings
+      vim.g.vimtex_quickfix_open_on_warning = 0 --  don't open quickfix if there are only warnings
+      vim.g.vimtex_quickfix_ignore_filters =
+        { 'Underfull', 'Overfull', 'LaTeX Warning: .\\+ float specifier changed to', 'Package hyperref Warning: Token not allowed in a PDF string' }
+    end,
+  },
 }, {
   ui = {
     -- If you are using a Nerd Font: set icons to an empty table which will use the
